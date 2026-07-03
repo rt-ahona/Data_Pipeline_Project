@@ -1,6 +1,6 @@
-# Automated Crypto Data Pipeline & REST API
+# Automated Crypto Data Pipeline & Full-Stack REST Dashboard
 
-A production-ready data engineering and backend project built with Python, SQLite, and FastAPI. It automatically extracts real-time market data from a public REST API, applies data transformations, utilizes secure parameter ingestion with rigorous error handling, and serves the dataset via scalable API endpoints.
+A production-ready, full-stack data engineering and analytics application built with Python, SQLite, FastAPI, and Streamlit. The system automatically extracts real-time market data from a public REST API via an autonomous scheduler, applies data transformations, safeguards persistence using parameterized SQL queries, and serves the database via a scalable REST API alongside an interactive data visualization dashboard.
 
 ## System Architecture
 
@@ -21,10 +21,10 @@ A production-ready data engineering and backend project built with Python, SQLit
             │
             ▼ [SQLite Connection / Row Factory Mapping]
  ┌──────────────────────┐
- │        app.py        │ ◄──► [Uvicorn ASGI Server]
- └──────────┬───────────┘
+ │        app.py        │ ◄──► [FastAPI / Uvicorn REST API]
+ └──────────▲───────────┘
             │
-            ▼
+            ▼ [JSON Serialization Layer]
  ┌──────────────────────┐
- │ http://localhost:8000│ ───► (/prices & /docs Swagger UI)
+ │     frontend.py      │ ◄──► [Streamlit UI Dashboard]
  └──────────────────────┘
