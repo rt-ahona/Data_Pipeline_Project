@@ -1,15 +1,30 @@
 # Automated Crypto Data Pipeline & REST API
 
-A production-ready data engineering and backend project built with Python, SQLite, and FastAPI. It automatically extracts real-time market data from a public REST API, applies data transformations, secure parameter ingestion, error handling, and serves the dataset via scalable API endpoints.
+A production-ready data engineering and backend project built with Python, SQLite, and FastAPI. It automatically extracts real-time market data from a public REST API, applies data transformations, utilizes secure parameter ingestion with rigorous error handling, and serves the dataset via scalable API endpoints.
 
-## Features
-- **Data Ingestion Script:** Fetches real-time structured marketplace metrics cleanly using network timeout metrics.
-- **Data Integrity Layer:** Protects against SQL Injection attacks using parameterized querying into a relational SQLite schema.
-- **Robust System Logging:** Implements file-audited structural execution history tracking.
-- **Web Interface Endpoint:** Exposes interactive auto-generated Swagger UI routing via a lightweight FastAPI server core.
+## System Architecture
 
-## Setup Instructions
-
-1. **Install Dependencies:**
-   ```bash
-   pip install requests fastapi uvicorn
+```text
+ ┌──────────────────────┐
+ │  CoinGecko REST API  │
+ └──────────┬───────────┘
+            │
+            ▼ [Secure HTTP Fetch]
+ ┌──────────────────────┐
+ │     pipeline.py      │ ───► [Generates pipeline.log]
+ └──────────┬───────────┘
+            │
+            ▼ [Parameterized SQL Ingestion]
+ ┌──────────────────────┐
+ │    market_data.db    │
+ └──────────▲───────────┘
+            │
+            ▼ [SQLite Connection / Row Factory Mapping]
+ ┌──────────────────────┐
+ │        app.py        │ ◄──► [Uvicorn ASGI Server]
+ └──────────┬───────────┘
+            │
+            ▼
+ ┌──────────────────────┐
+ │ http://localhost:8000│ ───► (/prices & /docs Swagger UI)
+ └──────────────────────┘
