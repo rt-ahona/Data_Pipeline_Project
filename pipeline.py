@@ -1,101 +1,78 @@
+import time
+import logging
 import requests
 import sqlite3
-import logging
-import os
 from datetime import datetime
 
-# 1. Configure structured logging to track pipeline execution
+# Configure Logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("pipeline.log"),  # Saves logs to a file for auditing
-        logging.StreamHandler()              # Still prints to your Windsurf terminal
+        logging.FileHandler("pipeline.log"),
+        logging.StreamHandler()
     ]
 )
 
-# 2. Externalize configurations (Standard practice for backend security)
-DB_NAME = os.getenv("DB_NAME", "market_data.db")
-API_URL = "https://api.coingecko.com/api/v3/coins/markets"
+DB_NAME = "market_data.db"
+API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true"
 
-def fetch_crypto_data():
-    """Fetches real-time market data with network exception handling."""
-    params = {
-        'vs_currency': 'usd',
-        'order': 'market_cap_desc',
-        'per_page': 5,
-        'page': 1
-    }
+def init_db():
+    """Initializes the database schema if it doesn't exist."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS crypto_prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            coin_id TEXT NOT NULL,
+            price_usd REAL NOT NULL,
+            change_24h REAL,
+            ingested_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def fetch_and_save_data():
+    """Fetches real-time crypto data and logs it into the database."""
+    logging.info("Starting automated data ingestion cycle...")
     try:
-        logging.info("Initiating API request to CoinGecko...")
-        response = requests.get(API_URL, params=params, timeout=10) # Added timeout to prevent hanging
+        response = requests.get(API_URL, timeout=10)
         response.raise_for_status()
-        logging.info("Data successfully fetched from remote API.")
-        return response.json()
-    except requests.exceptions.Timeout:
-        logging.error("The request timed out. Check network latency.")
-    except requests.exceptions.HTTPError as http_err:
-        logging.error(f"HTTP error occurred: {http_err}")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"An unexpected network error occurred: {e}")
-    return None
-
-def setup_database():
-    """Initializes the database using contextual connection management."""
-    try:
+        data = response.json()
+        
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS crypto_prices (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                current_price REAL,
-                market_cap REAL,
-                last_updated TEXT,
-                ingested_at TEXT
-            )
-        ''')
+        current_time = datetime.now().isoformat()
+        
+        for coin_id, metrics in data.items():
+            price = metrics.get("usd")
+            change = metrics.get("usd_24h_change")
+            
+            cursor.execute("""
+                INSERT INTO crypto_prices (coin_id, price_usd, change_24h, ingested_at)
+                VALUES (?, ?, ?, ?)
+            """, (coin_id, price, change, current_time))
+            
         conn.commit()
-        return conn
-    except sqlite3.Error as e:
-        logging.critical(f"Database initialization failed: {e}")
-        raise
+        conn.close()
+        logging.info("Successfully ingested and saved market data for Bitcoin, Ethereum, and Solana.")
+        
+    except Exception as e:
+        logging.error(f"Pipeline execution failed: {str(e)}")
 
-def save_to_database(conn, data):
-    """Inserts processed data securely using parameterized queries to prevent SQL Injection."""
-    if not data:
-        logging.warning("No data provided to save.")
-        return
-
+def start_scheduler(interval_seconds=60):
+    """Keeps the script running indefinitely, executing the pipeline at regular intervals."""
+    init_db()
+    logging.info(f"Crypto Data Pipeline Scheduler Activated. Running every {interval_seconds} seconds. Press CTRL+C to stop.")
+    
     try:
-        cursor = conn.cursor()
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        for item in data:
-            cursor.execute('''
-                INSERT OR REPLACE INTO crypto_prices (id, name, current_price, market_cap, last_updated, ingested_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (item['id'], item['name'], item['current_price'], item['market_cap'], item['last_updated'], current_time))
-        
-        conn.commit()
-        logging.info(f"Successfully ingested {len(data)} records into the database.")
-    except sqlite3.Error as e:
-        logging.error(f"Failed to insert data into database: {e}")
-        conn.rollback() # Rolls back changes if an error happens to protect data integrity
+        while True:
+            fetch_and_save_data()
+            time.sleep(interval_seconds)
+    except KeyboardInterrupt:
+        logging.info("Scheduler stopped manually by user. Shutting down cleanly.")
 
 if __name__ == "__main__":
-    logging.info("=== Data Pipeline Process Started ===")
-    raw_data = fetch_crypto_data()
-    
-    if raw_data:
-        try:
-            db_connection = setup_database()
-            save_to_database(db_connection, raw_data)
-        finally:
-            if 'db_connection' in locals():
-                db_connection.close()
-                logging.info("Database connection closed cleanly.")
-    else:
-        logging.warning("Pipeline execution halted due to lack of source data.")
-        
-    logging.info("=== Data Pipeline Process Completed ===")
+    # Runs the pipeline automatically every 60 seconds
+    start_scheduler(interval_seconds=60)
